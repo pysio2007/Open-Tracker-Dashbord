@@ -81,44 +81,50 @@ async function parseXmlStats(xmlText) {
 
 // 创建数据库表(如果不存在)
 async function initializeDatabase(db) {
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS tracker_stats (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tracker_id TEXT,
-      version TEXT,
-      uptime INTEGER,
-      torrents_count INTEGER,
-      torrents_iterator INTEGER,
-      peers_count INTEGER,
-      seeds_count INTEGER,
-      completed_count INTEGER,
-      tcp_accept INTEGER,
-      tcp_announce INTEGER,
-      tcp_scrape INTEGER,
-      udp_overall INTEGER,
-      udp_connect INTEGER,
-      udp_announce INTEGER,
-      udp_scrape INTEGER,
-      udp_missmatch INTEGER,
-      livesync_count INTEGER,
-      debug_data TEXT, -- 存储JSON格式的debug数据
-      timestamp TEXT
-    )
-  `);
-  
-  // 创建采样频率表，用来实现智能采样
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS sampling_info (
-      id INTEGER PRIMARY KEY,
-      last_minute_sample TEXT,
-      last_10min_sample TEXT
-    )
-  `);
-  
-  // 确保有一条采样信息记录
-  const samplingInfo = await db.prepare(`SELECT COUNT(*) as count FROM sampling_info`).first();
-  if (!samplingInfo || samplingInfo.count === 0) {
-    await db.prepare(`INSERT INTO sampling_info (id, last_minute_sample, last_10min_sample) VALUES (1, NULL, NULL)`).run();
+  try {
+    // 创建统计数据表
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS tracker_stats (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tracker_id TEXT,
+        version TEXT,
+        uptime INTEGER,
+        torrents_count INTEGER,
+        torrents_iterator INTEGER,
+        peers_count INTEGER,
+        seeds_count INTEGER,
+        completed_count INTEGER,
+        tcp_accept INTEGER,
+        tcp_announce INTEGER,
+        tcp_scrape INTEGER,
+        udp_overall INTEGER,
+        udp_connect INTEGER,
+        udp_announce INTEGER,
+        udp_scrape INTEGER,
+        udp_missmatch INTEGER,
+        livesync_count INTEGER,
+        debug_data TEXT,
+        timestamp TEXT
+      )
+    `).run();
+    
+    // 创建采样信息表
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS sampling_info (
+        id INTEGER PRIMARY KEY,
+        last_minute_sample TEXT,
+        last_10min_sample TEXT
+      )
+    `).run();
+    
+    // 确保有一条采样信息记录
+    const samplingInfo = await db.prepare(`SELECT COUNT(*) as count FROM sampling_info`).first();
+    if (!samplingInfo || samplingInfo.count === 0) {
+      await db.prepare(`INSERT INTO sampling_info (id, last_minute_sample, last_10min_sample) VALUES (1, NULL, NULL)`).run();
+    }
+  } catch (error) {
+    console.error("初始化数据库失败:", error);
+    throw error;
   }
 }
 
