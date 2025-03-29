@@ -24,6 +24,27 @@ let currentPage = 'dashboard';
 
 // DOM元素加载完成后初始化
 document.addEventListener('DOMContentLoaded', () => {
+  // 设置Chart.js全局默认值
+  Chart.defaults.color = '#a6adba';
+  Chart.defaults.borderColor = 'rgba(166, 173, 186, 0.1)';
+  Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  
+  // 添加画布背景插件
+  const bgPlugin = {
+    id: 'customCanvasBackgroundColor',
+    beforeDraw: (chart, args, options) => {
+      const {ctx} = chart;
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-over';
+      ctx.fillStyle = options.color || '#ffffff';
+      ctx.fillRect(0, 0, chart.width, chart.height);
+      ctx.restore();
+    }
+  };
+  
+  // 全局注册插件
+  Chart.register(bgPlugin);
+  
   // 初始化主题
   initTheme();
   
@@ -36,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 初始化刷新存储按钮
   initRefreshStorageButton();
   
-  // 加载初始数据
+  // 加载初始数据 - 确保指定时间范围
   loadStats(currentTimeRange);
   
   // 加载存储使用情况
@@ -145,6 +166,12 @@ function initTheme() {
 function initTimeRangeSelector() {
   const buttons = document.querySelectorAll('.time-range-btn');
   
+  // 默认选中1小时按钮
+  const defaultBtn = document.querySelector('.time-range-btn[data-range="1h"]');
+  if (defaultBtn) {
+    defaultBtn.classList.add('active');
+  }
+  
   buttons.forEach(btn => {
     btn.addEventListener('click', () => {
       // 移除所有按钮的活动状态
@@ -155,6 +182,7 @@ function initTimeRangeSelector() {
       
       // 更新当前时间范围并加载数据
       currentTimeRange = btn.dataset.range;
+      console.log(`切换到时间范围: ${currentTimeRange}`);
       loadStats(currentTimeRange);
     });
   });
@@ -229,6 +257,8 @@ async function loadStats(timeRange) {
     // 显示加载指示器
     showLoading(true);
     
+    console.log(`正在加载 ${timeRange} 的统计数据...`);
+    
     // 获取统计数据
     const response = await fetch(`${API_BASE_URL}/api/stats?timeRange=${timeRange}`);
     
@@ -242,6 +272,8 @@ async function loadStats(timeRange) {
       console.warn('没有可用的统计数据');
       return;
     }
+    
+    console.log(`成功获取 ${data.length} 条数据点`);
     
     // 更新统计信息
     updateStatsDisplay(data);
@@ -373,14 +405,15 @@ function updateUsersChart(timestamps, data) {
   // 更新徽章数据
   document.getElementById('users-count-badge').textContent = formatNumber(latestData.peers_count);
   
+  // 使用固定颜色，不依赖CSS变量
   const chartData = {
     labels: timestamps,
     datasets: [
       {
         label: '种子数',
         data: data.map(d => d.torrents_count),
-        borderColor: 'hsl(var(--p) / 0.4)',
-        backgroundColor: 'hsl(var(--p) / 0.05)',
+        borderColor: '#f87171', // 直接使用十六进制颜色
+        backgroundColor: 'rgba(248, 113, 113, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -388,8 +421,8 @@ function updateUsersChart(timestamps, data) {
       {
         label: 'Peers',
         data: data.map(d => d.peers_count),
-        borderColor: 'hsl(var(--s) / 0.4)',
-        backgroundColor: 'hsl(var(--s) / 0.05)',
+        borderColor: '#facc15', // 黄色
+        backgroundColor: 'rgba(250, 204, 21, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -397,8 +430,8 @@ function updateUsersChart(timestamps, data) {
       {
         label: '做种者',
         data: data.map(d => d.seeds_count),
-        borderColor: 'hsl(var(--a) / 0.4)',
-        backgroundColor: 'hsl(var(--a) / 0.05)',
+        borderColor: '#4ade80', // 绿色
+        backgroundColor: 'rgba(74, 222, 128, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -406,8 +439,8 @@ function updateUsersChart(timestamps, data) {
       {
         label: '已完成',
         data: data.map(d => d.completed_count),
-        borderColor: 'hsl(var(--n) / 0.4)',
-        backgroundColor: 'hsl(var(--n) / 0.05)',
+        borderColor: '#60a5fa', // 蓝色
+        backgroundColor: 'rgba(96, 165, 250, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -445,8 +478,8 @@ function updateConnectionsChart(timestamps, data) {
       {
         label: 'TCP总连接',
         data: data.map(d => d.tcp_accept),
-        borderColor: 'hsl(var(--in) / 0.4)',
-        backgroundColor: 'hsl(var(--in) / 0.05)',
+        borderColor: '#f87171', // 红色
+        backgroundColor: 'rgba(248, 113, 113, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -454,8 +487,8 @@ function updateConnectionsChart(timestamps, data) {
       {
         label: 'UDP总连接',
         data: data.map(d => d.udp_overall),
-        borderColor: 'hsl(var(--wa) / 0.4)',
-        backgroundColor: 'hsl(var(--wa) / 0.05)',
+        borderColor: '#facc15', // 黄色
+        backgroundColor: 'rgba(250, 204, 21, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -493,8 +526,8 @@ function updateTcpChart(timestamps, data) {
       {
         label: '公告 (Announce)',
         data: data.map(d => d.tcp_announce),
-        borderColor: 'hsl(var(--p) / 0.4)',
-        backgroundColor: 'hsl(var(--p) / 0.05)',
+        borderColor: '#f87171', // 红色
+        backgroundColor: 'rgba(248, 113, 113, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -502,8 +535,8 @@ function updateTcpChart(timestamps, data) {
       {
         label: '刮削 (Scrape)',
         data: data.map(d => d.tcp_scrape),
-        borderColor: 'hsl(var(--s) / 0.4)',
-        backgroundColor: 'hsl(var(--s) / 0.05)',
+        borderColor: '#facc15', // 黄色
+        backgroundColor: 'rgba(250, 204, 21, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -541,8 +574,8 @@ function updateUdpChart(timestamps, data) {
       {
         label: '连接 (Connect)',
         data: data.map(d => d.udp_connect),
-        borderColor: 'hsl(var(--p) / 0.4)',
-        backgroundColor: 'hsl(var(--p) / 0.05)',
+        borderColor: '#f87171', // 红色
+        backgroundColor: 'rgba(248, 113, 113, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -550,8 +583,8 @@ function updateUdpChart(timestamps, data) {
       {
         label: '公告 (Announce)',
         data: data.map(d => d.udp_announce),
-        borderColor: 'hsl(var(--s) / 0.4)',
-        backgroundColor: 'hsl(var(--s) / 0.05)',
+        borderColor: '#facc15', // 黄色
+        backgroundColor: 'rgba(250, 204, 21, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -559,8 +592,8 @@ function updateUdpChart(timestamps, data) {
       {
         label: '刮削 (Scrape)',
         data: data.map(d => d.udp_scrape),
-        borderColor: 'hsl(var(--a) / 0.4)',
-        backgroundColor: 'hsl(var(--a) / 0.05)',
+        borderColor: '#4ade80', // 绿色
+        backgroundColor: 'rgba(74, 222, 128, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -568,8 +601,8 @@ function updateUdpChart(timestamps, data) {
       {
         label: '不匹配 (Missmatch)',
         data: data.map(d => d.udp_missmatch),
-        borderColor: 'hsl(var(--n) / 0.4)',
-        backgroundColor: 'hsl(var(--n) / 0.05)',
+        borderColor: '#60a5fa', // 蓝色
+        backgroundColor: 'rgba(96, 165, 250, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -614,8 +647,8 @@ function updateTorrentsDetailChart(timestamps, data) {
       {
         label: '种子数量',
         data: data.map(d => d.torrents_count),
-        borderColor: 'hsl(var(--p) / 0.4)',
-        backgroundColor: 'hsl(var(--p) / 0.05)',
+        borderColor: '#f87171', // 红色
+        backgroundColor: 'rgba(248, 113, 113, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -663,8 +696,8 @@ function updatePeersDetailChart(timestamps, data) {
       {
         label: '总Peers',
         data: data.map(d => d.peers_count),
-        borderColor: 'hsl(var(--s) / 0.4)',
-        backgroundColor: 'hsl(var(--s) / 0.05)',
+        borderColor: '#f87171', // 红色
+        backgroundColor: 'rgba(248, 113, 113, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -672,8 +705,8 @@ function updatePeersDetailChart(timestamps, data) {
       {
         label: '做种者',
         data: data.map(d => d.seeds_count),
-        borderColor: 'hsl(var(--a) / 0.4)',
-        backgroundColor: 'hsl(var(--a) / 0.05)',
+        borderColor: '#4ade80', // 绿色
+        backgroundColor: 'rgba(74, 222, 128, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -721,8 +754,8 @@ function updateSeedsDetailChart(timestamps, data) {
       {
         label: '做种者数量',
         data: data.map(d => d.seeds_count),
-        borderColor: 'hsl(var(--su) / 0.4)',
-        backgroundColor: 'hsl(var(--su) / 0.05)',
+        borderColor: '#4ade80', // 绿色
+        backgroundColor: 'rgba(74, 222, 128, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -767,8 +800,8 @@ function updateCompletedDetailChart(timestamps, data) {
       {
         label: '已完成数量',
         data: data.map(d => d.completed_count),
-        borderColor: 'hsl(var(--in) / 0.4)',
-        backgroundColor: 'hsl(var(--in) / 0.05)',
+        borderColor: '#60a5fa', // 蓝色
+        backgroundColor: 'rgba(96, 165, 250, 0.2)',
         tension: 0.4,
         borderWidth: 1.5,
         fill: true
@@ -795,17 +828,33 @@ function updateCompletedDetailChart(timestamps, data) {
  */
 function getChartOptions(title) {
   const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
-  const textColor = isDarkMode ? 'hsl(var(--bc) / 0.5)' : 'hsl(var(--bc) / 0.5)';
-  const gridColor = isDarkMode ? 'hsl(var(--bc) / 0.05)' : 'hsl(var(--bc) / 0.05)';
+  
+  // 明确定义颜色而不使用CSS变量
+  const colors = {
+    background: isDarkMode ? '#1d232a' : '#ffffff',
+    cardBackground: isDarkMode ? '#191e24' : '#ffffff',
+    text: isDarkMode ? '#a6adba' : '#1f2937',
+    gridLines: isDarkMode ? 'rgba(166, 173, 186, 0.1)' : 'rgba(31, 41, 55, 0.1)',
+    tooltipBackground: isDarkMode ? '#2a323c' : '#f3f4f6'
+  };
+  
+  // 根据时间范围设置时间刻度
+  const timeSettings = getTimeSettings(currentTimeRange);
   
   return {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
+      customCanvasBackgroundColor: {
+        color: colors.cardBackground
+      },
+      filler: {
+        propagate: false
+      },
       title: {
         display: false,
         text: title,
-        color: textColor,
+        color: colors.text,
         font: {
           size: 14,
           weight: 'normal'
@@ -813,52 +862,77 @@ function getChartOptions(title) {
       },
       legend: {
         labels: {
-          color: textColor,
+          color: colors.text,
           usePointStyle: true,
           pointStyle: 'circle',
           font: {
             size: 12
-          }
+          },
+          boxWidth: 10,
+          padding: 15
         }
       },
       tooltip: {
         mode: 'index',
         intersect: false,
-        backgroundColor: isDarkMode ? 'hsl(var(--b2) / 0.9)' : 'hsl(var(--b1) / 0.9)',
-        titleColor: textColor,
-        bodyColor: textColor,
-        borderColor: gridColor,
-        borderWidth: 1
+        backgroundColor: colors.tooltipBackground,
+        titleColor: colors.text,
+        bodyColor: colors.text,
+        borderColor: colors.gridLines,
+        borderWidth: 1,
+        padding: 10,
+        callbacks: {
+          title: function(tooltipItems) {
+            const date = new Date(tooltipItems[0].parsed.x);
+            return date.toLocaleString('zh-CN', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit'
+            });
+          }
+        }
       }
     },
     scales: {
       x: {
         type: 'time',
         time: {
-          unit: getTimeUnit(currentTimeRange)
-        },
-        ticks: {
-          color: textColor,
-          font: {
-            size: 11
+          unit: timeSettings.unit,
+          stepSize: timeSettings.stepSize,
+          displayFormats: {
+            minute: 'HH:mm',
+            hour: 'MM-dd HH:mm',
+            day: 'MM-dd'
           }
         },
         grid: {
-          color: gridColor,
-          drawBorder: false
+          color: colors.gridLines,
+          drawBorder: false,
+          display: true
+        },
+        ticks: {
+          color: colors.text,
+          maxTicksLimit: 10,
+          font: {
+            size: 11
+          }
         }
       },
       y: {
         beginAtZero: true,
+        grid: {
+          color: colors.gridLines,
+          drawBorder: false,
+          display: true
+        },
         ticks: {
-          color: textColor,
+          color: colors.text,
           font: {
             size: 11
           }
-        },
-        grid: {
-          color: gridColor,
-          drawBorder: false
         }
       }
     },
@@ -877,17 +951,33 @@ function getChartOptions(title) {
  */
 function getDetailChartOptions(title) {
   const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
-  const textColor = isDarkMode ? 'hsl(var(--bc) / 0.5)' : 'hsl(var(--bc) / 0.5)';
-  const gridColor = isDarkMode ? 'hsl(var(--bc) / 0.05)' : 'hsl(var(--bc) / 0.05)';
+  
+  // 明确定义颜色而不使用CSS变量
+  const colors = {
+    background: isDarkMode ? '#1d232a' : '#ffffff',
+    cardBackground: isDarkMode ? '#191e24' : '#ffffff',
+    text: isDarkMode ? '#a6adba' : '#1f2937',
+    gridLines: isDarkMode ? 'rgba(166, 173, 186, 0.1)' : 'rgba(31, 41, 55, 0.1)',
+    tooltipBackground: isDarkMode ? '#2a323c' : '#f3f4f6'
+  };
+  
+  // 根据时间范围设置时间刻度
+  const timeSettings = getTimeSettings(currentTimeRange);
   
   return {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
+      customCanvasBackgroundColor: {
+        color: colors.cardBackground
+      },
+      filler: {
+        propagate: false
+      },
       title: {
         display: false,
         text: title,
-        color: textColor,
+        color: colors.text,
         font: {
           size: 14,
           weight: 'normal'
@@ -899,42 +989,64 @@ function getDetailChartOptions(title) {
       tooltip: {
         mode: 'index',
         intersect: false,
-        backgroundColor: isDarkMode ? 'hsl(var(--b2) / 0.9)' : 'hsl(var(--b1) / 0.9)',
-        titleColor: textColor,
-        bodyColor: textColor,
-        borderColor: gridColor,
-        borderWidth: 1
+        backgroundColor: colors.tooltipBackground,
+        titleColor: colors.text,
+        bodyColor: colors.text,
+        borderColor: colors.gridLines,
+        borderWidth: 1,
+        padding: 10,
+        callbacks: {
+          title: function(tooltipItems) {
+            const date = new Date(tooltipItems[0].parsed.x);
+            return date.toLocaleString('zh-CN', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit'
+            });
+          }
+        }
       }
     },
     scales: {
       x: {
         type: 'time',
         time: {
-          unit: getTimeUnit(currentTimeRange)
-        },
-        ticks: {
-          color: textColor,
-          maxTicksLimit: 6,
-          font: {
-            size: 11
+          unit: timeSettings.unit,
+          stepSize: timeSettings.stepSize,
+          displayFormats: {
+            minute: 'HH:mm',
+            hour: 'MM-dd HH:mm',
+            day: 'MM-dd'
           }
         },
         grid: {
-          color: gridColor,
-          drawBorder: false
+          color: colors.gridLines,
+          drawBorder: false,
+          display: true
+        },
+        ticks: {
+          color: colors.text,
+          maxTicksLimit: 8,
+          font: {
+            size: 11
+          }
         }
       },
       y: {
         beginAtZero: true,
+        grid: {
+          color: colors.gridLines,
+          drawBorder: false,
+          display: true
+        },
         ticks: {
-          color: textColor,
+          color: colors.text,
           font: {
             size: 11
           }
-        },
-        grid: {
-          color: gridColor,
-          drawBorder: false
         }
       }
     },
@@ -947,25 +1059,35 @@ function getDetailChartOptions(title) {
 }
 
 /**
+ * 根据时间范围获取时间单位和步长
+ * @param {string} timeRange - 时间范围
+ * @returns {Object} 时间设置对象
+ */
+function getTimeSettings(timeRange) {
+  switch (timeRange) {
+    case '1h':
+      return { unit: 'minute', stepSize: 1 };
+    case '6h':
+      return { unit: 'minute', stepSize: 30 };
+    case '24h':
+      return { unit: 'hour', stepSize: 2 };
+    case '7d':
+      return { unit: 'day', stepSize: 1 };
+    case '30d':
+      return { unit: 'day', stepSize: 3 };
+    default:
+      return { unit: 'hour', stepSize: 1 };
+  }
+}
+
+/**
  * 根据时间范围获取图表时间单位
  * @param {string} timeRange - 时间范围
  * @returns {string} 时间单位
  */
 function getTimeUnit(timeRange) {
-  switch (timeRange) {
-    case '1h':
-      return 'minute';
-    case '6h':
-      return 'minute';
-    case '24h':
-      return 'hour';
-    case '7d':
-      return 'day';
-    case '30d':
-      return 'day';
-    default:
-      return 'hour';
-  }
+  const settings = getTimeSettings(timeRange);
+  return settings.unit;
 }
 
 /**
@@ -977,25 +1099,29 @@ function updateChartsTheme() {
     torrentsDetailChart, peersDetailChart, seedsDetailChart, completedDetailChart
   ];
   
+  const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+  const backgroundColor = isDarkMode ? '#191e24' : '#ffffff';
+  
+  // 更新所有图表的背景色
   charts.forEach(chart => {
-    if (chart) {
-      // 更新图表选项以适应新主题
-      const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
-      const textColor = isDarkMode ? 'hsl(var(--bc) / 0.5)' : 'hsl(var(--bc) / 0.5)';
-      const gridColor = isDarkMode ? 'hsl(var(--bc) / 0.05)' : 'hsl(var(--bc) / 0.05)';
+    if (chart && chart.canvas) {
+      // 更新canvas背景色
+      chart.canvas.style.backgroundColor = backgroundColor;
       
-      chart.options.plugins.title.color = textColor;
-      if (chart.options.plugins.legend.labels) {
-        chart.options.plugins.legend.labels.color = textColor;
+      // 更新时间单位
+      if (chart.options && chart.options.scales && chart.options.scales.x) {
+        const timeSettings = getTimeSettings(currentTimeRange);
+        chart.options.scales.x.time.unit = timeSettings.unit;
+        chart.options.scales.x.time.stepSize = timeSettings.stepSize;
       }
-      chart.options.scales.x.ticks.color = textColor;
-      chart.options.scales.x.grid.color = gridColor;
-      chart.options.scales.y.ticks.color = textColor;
-      chart.options.scales.y.grid.color = gridColor;
       
+      // 强制重绘图表
       chart.update();
     }
   });
+  
+  // 完全重绘所有图表，确保颜色正确
+  loadStats(currentTimeRange);
 }
 
 /**

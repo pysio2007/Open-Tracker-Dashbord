@@ -7,40 +7,51 @@
  * 3. 提供API端点供前端查询统计数据
  */
 
+import { XMLParser } from 'fast-xml-parser';
+
 // 解析XML统计数据
 async function parseXmlStats(xmlText) {
-  // 简单的XML解析函数
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+  // 使用 fast-xml-parser 解析 XML
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: "@_"
+  });
+  
+  const xmlDoc = parser.parse(xmlText);
   
   const getValue = (path) => {
-    const el = xmlDoc.querySelector(path);
-    return el ? el.textContent.trim() : null;
+    const parts = path.split('.').map(p => p.trim());
+    let current = xmlDoc;
+    for (const part of parts) {
+      if (!current || !current[part]) return null;
+      current = current[part];
+    }
+    return current;
   };
 
   // 提取基本统计信息
   const stats = {
-    tracker_id: getValue("stats > tracker_id"),
-    version: getValue("stats > version"),
-    uptime: parseInt(getValue("stats > uptime") || 0),
-    torrents_count: parseInt(getValue("stats > torrents > count_mutex") || 0),
-    torrents_iterator: parseInt(getValue("stats > torrents > count_iterator") || 0),
-    peers_count: parseInt(getValue("stats > peers > count") || 0),
-    seeds_count: parseInt(getValue("stats > seeds > count") || 0),
-    completed_count: parseInt(getValue("stats > completed > count") || 0),
+    tracker_id: getValue("stats.tracker_id"),
+    version: getValue("stats.version"),
+    uptime: parseInt(getValue("stats.uptime") || 0),
+    torrents_count: parseInt(getValue("stats.torrents.count_mutex") || 0),
+    torrents_iterator: parseInt(getValue("stats.torrents.count_iterator") || 0),
+    peers_count: parseInt(getValue("stats.peers.count") || 0),
+    seeds_count: parseInt(getValue("stats.seeds.count") || 0),
+    completed_count: parseInt(getValue("stats.completed.count") || 0),
     
     // 连接统计
-    tcp_accept: parseInt(getValue("stats > connections > tcp > accept") || 0),
-    tcp_announce: parseInt(getValue("stats > connections > tcp > announce") || 0),
-    tcp_scrape: parseInt(getValue("stats > connections > tcp > scrape") || 0),
+    tcp_accept: parseInt(getValue("stats.connections.tcp.accept") || 0),
+    tcp_announce: parseInt(getValue("stats.connections.tcp.announce") || 0),
+    tcp_scrape: parseInt(getValue("stats.connections.tcp.scrape") || 0),
     
-    udp_overall: parseInt(getValue("stats > connections > udp > overall") || 0),
-    udp_connect: parseInt(getValue("stats > connections > udp > connect") || 0),
-    udp_announce: parseInt(getValue("stats > connections > udp > announce") || 0),
-    udp_scrape: parseInt(getValue("stats > connections > udp > scrape") || 0),
-    udp_missmatch: parseInt(getValue("stats > connections > udp > missmatch") || 0),
+    udp_overall: parseInt(getValue("stats.connections.udp.overall") || 0),
+    udp_connect: parseInt(getValue("stats.connections.udp.connect") || 0),
+    udp_announce: parseInt(getValue("stats.connections.udp.announce") || 0),
+    udp_scrape: parseInt(getValue("stats.connections.udp.scrape") || 0),
+    udp_missmatch: parseInt(getValue("stats.connections.udp.missmatch") || 0),
     
-    livesync_count: parseInt(getValue("stats > connections > livesync > count") || 0),
+    livesync_count: parseInt(getValue("stats.connections.livesync.count") || 0),
     
     // Debug信息
     debug: {
@@ -51,7 +62,7 @@ async function parseXmlStats(xmlText) {
       http_errors: {},
       
       // Mutex Stall计数
-      mutex_stall: parseInt(getValue("stats > debug > mutex_stall > count") || 0)
+      mutex_stall: parseInt(getValue("stats.debug.mutex_stall.count") || 0)
     },
     
     // 时间戳
@@ -59,22 +70,26 @@ async function parseXmlStats(xmlText) {
   };
   
   // 提取所有renew计数
-  const renewCounts = xmlDoc.querySelectorAll("stats > debug > renew > count");
-  renewCounts.forEach(node => {
-    const interval = node.getAttribute("interval");
-    if (interval) {
-      stats.debug.renew[interval] = parseInt(node.textContent.trim() || 0);
-    }
-  });
+  const renewCounts = getValue("stats.debug.renew.count");
+  if (Array.isArray(renewCounts)) {
+    renewCounts.forEach(node => {
+      const interval = node["@_interval"];
+      if (interval) {
+        stats.debug.renew[interval] = parseInt(node["#text"] || 0);
+      }
+    });
+  }
   
   // 提取所有HTTP错误计数
-  const httpErrors = xmlDoc.querySelectorAll("stats > debug > http_error > count");
-  httpErrors.forEach(node => {
-    const code = node.getAttribute("code");
-    if (code) {
-      stats.debug.http_errors[code] = parseInt(node.textContent.trim() || 0);
-    }
-  });
+  const httpErrors = getValue("stats.debug.http_error.count");
+  if (Array.isArray(httpErrors)) {
+    httpErrors.forEach(node => {
+      const code = node["@_code"];
+      if (code) {
+        stats.debug.http_errors[code] = parseInt(node["#text"] || 0);
+      }
+    });
+  }
   
   return stats;
 }

@@ -9,6 +9,9 @@
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <!-- Chart.js 用于图表 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Chart.js 日期适配器和 date-fns -->
+  <script src="https://cdn.jsdelivr.net/npm/date-fns@2.30.0/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
   <!-- 自定义样式 -->
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -147,7 +150,7 @@
               </h2>
               <div class="badge badge-primary badge-lg text-lg" id="torrents-count-badge">-</div>
             </div>
-            <div class="h-48">
+            <div class="h-48 bg-base-100 rounded-box">
               <canvas id="torrents-detail-chart"></canvas>
             </div>
             <div class="grid grid-cols-2 gap-4 mt-4">
@@ -175,7 +178,7 @@
               </h2>
               <div class="badge badge-secondary badge-lg text-lg" id="peers-count-badge">-</div>
             </div>
-            <div class="h-48">
+            <div class="h-48 bg-base-100 rounded-box">
               <canvas id="peers-detail-chart"></canvas>
             </div>
             <div class="grid grid-cols-2 gap-4 mt-4">
@@ -203,7 +206,7 @@
               </h2>
               <div class="badge badge-success badge-lg text-lg" id="seeds-count-badge">-</div>
             </div>
-            <div class="h-48">
+            <div class="h-48 bg-base-100 rounded-box">
               <canvas id="seeds-detail-chart"></canvas>
             </div>
             <div class="mt-4 bg-base-200 rounded-box p-4">
@@ -236,7 +239,7 @@
               </h2>
               <div class="badge badge-info badge-lg text-lg" id="completed-count-badge">-</div>
             </div>
-            <div class="h-48">
+            <div class="h-48 bg-base-100 rounded-box">
               <canvas id="completed-detail-chart"></canvas>
             </div>
             <div class="mt-4 bg-base-200 rounded-box p-4">
@@ -249,7 +252,7 @@
       
       <!-- 图表容器 -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <!-- 种子/Peers/做种者数量图表 -->
+        <!-- 用户统计图表 -->
         <div class="card bg-base-100 shadow-xl">
           <div class="card-body">
             <div class="flex justify-between items-center mb-4">
@@ -261,7 +264,7 @@
               </h2>
               <div class="badge badge-primary badge-lg text-lg" id="users-count-badge">-</div>
             </div>
-            <div class="h-64">
+            <div class="h-64 bg-base-100 rounded-box">
               <canvas id="users-chart"></canvas>
             </div>
           </div>
@@ -279,7 +282,7 @@
               </h2>
               <div class="badge badge-secondary badge-lg text-lg" id="connections-count-badge">-</div>
             </div>
-            <div class="h-64">
+            <div class="h-64 bg-base-100 rounded-box">
               <canvas id="connections-chart"></canvas>
             </div>
           </div>
@@ -297,7 +300,7 @@
               </h2>
               <div class="badge badge-accent badge-lg text-lg" id="tcp-count-badge">-</div>
             </div>
-            <div class="h-64">
+            <div class="h-64 bg-base-100 rounded-box">
               <canvas id="tcp-chart"></canvas>
             </div>
           </div>
@@ -315,7 +318,7 @@
               </h2>
               <div class="badge badge-neutral badge-lg text-lg" id="udp-count-badge">-</div>
             </div>
-            <div class="h-64">
+            <div class="h-64 bg-base-100 rounded-box">
               <canvas id="udp-chart"></canvas>
             </div>
           </div>
