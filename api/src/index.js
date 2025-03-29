@@ -5,9 +5,15 @@
  * 1. 定期从Tracker服务器获取XML统计数据
  * 2. 解析XML数据并存储到D1数据库
  * 3. 提供API端点供前端查询统计数据
+ * 4. 使用KV缓存减少数据库查询负担
  */
 
 import { XMLParser } from 'fast-xml-parser';
+
+// KV缓存键前缀
+const KV_CACHE_PREFIX = "stats_cache_";
+// 缓存冷却时间(毫秒)
+const CACHE_COOLDOWN_MS = 60 * 60 * 1000; // 1小时
 
 // 解析XML统计数据
 async function parseXmlStats(xmlText) {
@@ -255,66 +261,93 @@ async function shouldStoreCurrentSample(db, env) {
   return shouldStore;
 }
 
-// 收集和存储跟踪器统计数据
-async function collectAndStoreStats(env) {
+// 确定是否应该缓存当前时间范围的数据
+async function shouldUpdateCache(env, timeRange) {
   try {
-    // 获取统计数据
-    const response = await fetch(env.TRACKER_URL);
-    if (!response.ok) {
-      throw new Error(`获取Tracker统计数据失败: ${response.status}`);
+    // 直接获取缓存数据（包含元数据）
+    const cacheRecord = await env.STATS_KV.get(`${KV_CACHE_PREFIX}${timeRange}`, {type: "json"});
+    
+    if (!cacheRecord || !cacheRecord.metadata) {
+      // 如果没有缓存或元数据不存在，应该更新
+      return true;
     }
     
-    const xmlText = await response.text();
-    const stats = await parseXmlStats(xmlText);
+    const now = new Date();
+    const lastUpdate = new Date(cacheRecord.metadata.lastUpdate);
     
-    // 确保数据库已初始化
-    await initializeDatabase(env.DB);
-    
-    // 判断是否需要存储此次采样
-    const shouldStore = await shouldStoreCurrentSample(env.DB, env);
-    
-    if (shouldStore) {
-      // 存储统计数据
-      await env.DB.prepare(`
-        INSERT INTO tracker_stats (
-          tracker_id, version, uptime, torrents_count, torrents_iterator, peers_count, seeds_count, completed_count,
-          tcp_accept, tcp_announce, tcp_scrape, udp_overall, udp_connect, udp_announce, 
-          udp_scrape, udp_missmatch, livesync_count, debug_data, timestamp
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        stats.tracker_id, stats.version, stats.uptime, stats.torrents_count, stats.torrents_iterator,
-        stats.peers_count, stats.seeds_count, stats.completed_count,
-        stats.tcp_accept, stats.tcp_announce, stats.tcp_scrape,
-        stats.udp_overall, stats.udp_connect, stats.udp_announce,
-        stats.udp_scrape, stats.udp_missmatch, stats.livesync_count,
-        JSON.stringify(stats.debug), stats.timestamp
-      ).run();
-      
-      console.log(`已存储统计数据，时间戳: ${stats.timestamp}`);
-      
-      // 估算存储空间
-      const storageInfo = await estimateStorageSize(env.DB);
-      console.log(`估计的数据库大小: ${storageInfo.estimatedSize.toFixed(2)} MB (${storageInfo.rowCount} 行)`);
-      
-      // 清理旧数据
-      await cleanupOldData(env.DB);
-    } else {
-      console.log(`跳过此次采样存储，时间戳: ${stats.timestamp}`);
-    }
-    
-    return { 
-      success: true, 
-      message: shouldStore ? "统计数据已成功收集和存储" : "已收集但未存储此次采样",
-      data: stats
-    };
+    // 检查缓存是否已过期(1小时缓存CD)
+    const elapsedMs = now - lastUpdate;
+    return elapsedMs >= CACHE_COOLDOWN_MS;
   } catch (error) {
-    console.error("收集统计数据失败:", error);
-    return { success: false, error: error.message };
+    console.error("检查缓存状态失败:", error);
+    return true; // 出错时默认更新缓存
   }
 }
 
-// 查询统计数据
-async function queryStats(db, timeRange) {
+// 保存数据到KV缓存
+async function saveToCache(env, timeRange, data) {
+  try {
+    // 构造完整的缓存记录（包含元数据和数据）
+    const cacheRecord = {
+      metadata: {
+        lastUpdate: new Date().toISOString(),
+        count: data.length,
+        timeRange: timeRange
+      },
+      data: data
+    };
+    
+    // 保存合并后的数据到KV
+    await env.STATS_KV.put(`${KV_CACHE_PREFIX}${timeRange}`, JSON.stringify(cacheRecord));
+    
+    console.log(`已更新KV缓存: ${timeRange}，共${data.length}条记录`);
+    return true;
+  } catch (error) {
+    console.error("保存到KV缓存失败:", error);
+    return false;
+  }
+}
+
+// 从KV缓存获取数据
+async function getFromCache(env, timeRange) {
+  try {
+    // 直接获取缓存记录
+    const cacheRecord = await env.STATS_KV.get(`${KV_CACHE_PREFIX}${timeRange}`, {type: "json"});
+    
+    if (!cacheRecord || !cacheRecord.data) {
+      return null; // 缓存不存在
+    }
+    
+    console.log(`从KV缓存读取: ${timeRange}，共${cacheRecord.data.length}条记录`);
+    return cacheRecord.data;
+  } catch (error) {
+    console.error("从KV缓存读取失败:", error);
+    return null;
+  }
+}
+
+// 查询统计数据 (添加缓存支持)
+async function queryStats(db, env, timeRange) {
+  // 首先尝试从缓存获取数据
+  const cachedData = await getFromCache(env, timeRange);
+  
+  // 检查是否需要更新缓存
+  const shouldUpdate = await shouldUpdateCache(env, timeRange);
+  
+  // 如果有缓存且在CD期间，直接返回缓存数据
+  if (cachedData && !shouldUpdate) {
+    console.log(`缓存CD期间，使用KV缓存数据: ${timeRange}`);
+    return cachedData;
+  }
+  
+  // 如果没有缓存但CD未到期，返回空数据而不是查询数据库
+  if (!cachedData && !shouldUpdate) {
+    console.log(`缓存CD期间，但缓存数据不存在: ${timeRange}`);
+    return [];
+  }
+  
+  console.log(`缓存CD期已过，更新KV缓存: ${timeRange}`);
+  
   // 根据时间范围计算起始时间
   const now = new Date();
   const startDate = new Date();
@@ -364,7 +397,145 @@ async function queryStats(db, timeRange) {
     return row;
   });
   
+  // 更新缓存
+  await saveToCache(env, timeRange, processedResults);
+  
   return processedResults;
+}
+
+// 收集和存储跟踪器统计数据
+async function collectAndStoreStats(env) {
+  try {
+    // 获取统计数据
+    const response = await fetch(env.TRACKER_URL);
+    if (!response.ok) {
+      throw new Error(`获取Tracker统计数据失败: ${response.status}`);
+    }
+    
+    const xmlText = await response.text();
+    const stats = await parseXmlStats(xmlText);
+    
+    // 确保数据库已初始化
+    await initializeDatabase(env.DB);
+    
+    // 判断是否需要存储此次采样
+    const shouldStore = await shouldStoreCurrentSample(env.DB, env);
+    
+    if (shouldStore) {
+      // 存储统计数据
+      await env.DB.prepare(`
+        INSERT INTO tracker_stats (
+          tracker_id, version, uptime, torrents_count, torrents_iterator, peers_count, seeds_count, completed_count,
+          tcp_accept, tcp_announce, tcp_scrape, udp_overall, udp_connect, udp_announce, 
+          udp_scrape, udp_missmatch, livesync_count, debug_data, timestamp
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        stats.tracker_id, stats.version, stats.uptime, stats.torrents_count, stats.torrents_iterator,
+        stats.peers_count, stats.seeds_count, stats.completed_count,
+        stats.tcp_accept, stats.tcp_announce, stats.tcp_scrape,
+        stats.udp_overall, stats.udp_connect, stats.udp_announce,
+        stats.udp_scrape, stats.udp_missmatch, stats.livesync_count,
+        JSON.stringify(stats.debug), stats.timestamp
+      ).run();
+      
+      console.log(`已存储统计数据，时间戳: ${stats.timestamp}`);
+      
+      // 估算存储空间
+      const storageInfo = await estimateStorageSize(env.DB);
+      console.log(`估计的数据库大小: ${storageInfo.estimatedSize.toFixed(2)} MB (${storageInfo.rowCount} 行)`);
+      
+      // 清理旧数据
+      await cleanupOldData(env.DB);
+      
+      // 重置所有缓存的元数据，表示缓存需要更新
+      await resetCacheMetadata(env);
+    } else {
+      console.log(`跳过此次采样存储，时间戳: ${stats.timestamp}`);
+    }
+    
+    return { 
+      success: true, 
+      message: shouldStore ? "统计数据已成功收集和存储" : "已收集但未存储此次采样",
+      data: stats
+    };
+  } catch (error) {
+    console.error("收集统计数据失败:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+// 重置缓存元数据，强制下次查询时更新缓存
+async function resetCacheMetadata(env) {
+  try {
+    // 获取所有缓存键
+    const cacheKeys = await listCacheKeys(env);
+    
+    if (cacheKeys && cacheKeys.length > 0) {
+      // 删除所有缓存记录
+      for (const key of cacheKeys) {
+        await env.STATS_KV.delete(key);
+      }
+      console.log(`已删除所有缓存(${cacheKeys.length}个)，下次查询将更新缓存`);
+    } else {
+      console.log("当前没有缓存需要重置");
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("重置缓存失败:", error);
+    return false;
+  }
+}
+
+// 列出所有缓存键
+async function listCacheKeys(env) {
+  try {
+    // 注意：此处简化实现，实际应按时间范围分别列出
+    // 假设只有5个预定义的时间范围
+    const timeRanges = ["1h", "6h", "24h", "7d", "30d"];
+    return timeRanges.map(range => `${KV_CACHE_PREFIX}${range}`);
+  } catch (error) {
+    console.error("获取缓存键失败:", error);
+    return [];
+  }
+}
+
+// 获取KV缓存统计信息
+async function getCacheStats(env) {
+  try {
+    const timeRanges = ["1h", "6h", "24h", "7d", "30d"];
+    const now = new Date();
+    const cacheStats = [];
+    
+    // 为每个时间范围获取缓存记录和状态
+    for (const timeRange of timeRanges) {
+      const cacheRecord = await env.STATS_KV.get(`${KV_CACHE_PREFIX}${timeRange}`, {type: "json"});
+      
+      if (cacheRecord && cacheRecord.metadata) {
+        const lastUpdate = new Date(cacheRecord.metadata.lastUpdate);
+        const elapsedMs = now - lastUpdate;
+        const remainingCooldownMs = Math.max(0, CACHE_COOLDOWN_MS - elapsedMs);
+        
+        cacheStats.push({
+          timeRange,
+          lastUpdate: cacheRecord.metadata.lastUpdate,
+          count: cacheRecord.metadata.count,
+          age: Math.round(elapsedMs / (1000 * 60)) + "分钟",
+          cdRemaining: Math.round(remainingCooldownMs / (1000 * 60)) + "分钟",
+          inCooldown: remainingCooldownMs > 0
+        });
+      }
+    }
+    
+    return {
+      exists: cacheStats.length > 0,
+      timeRanges: cacheStats,
+      count: cacheStats.length
+    };
+  } catch (error) {
+    console.error("获取缓存统计信息失败:", error);
+    return { exists: false, error: error.message };
+  }
 }
 
 // 主处理程序
@@ -400,12 +571,58 @@ export default {
     // API路由处理
     if (path === "/api/stats") {
       const timeRange = url.searchParams.get("timeRange") || "24h";
-      const data = await queryStats(env.DB, timeRange);
+      const forceRefresh = url.searchParams.get("refresh") === "true";
+      
+      // 直接从缓存获取数据和元数据
+      const cacheRecord = await env.STATS_KV.get(`${KV_CACHE_PREFIX}${timeRange}`, {type: "json"});
+      const now = new Date();
+      
+      // 判断是否在CD期间
+      let inCooldown = false;
+      if (cacheRecord && cacheRecord.metadata) {
+        const lastUpdate = new Date(cacheRecord.metadata.lastUpdate);
+        const elapsedMs = now - lastUpdate;
+        inCooldown = elapsedMs < CACHE_COOLDOWN_MS;
+      }
+      
+      // 如果强制刷新且不在CD期间，才允许重置缓存
+      if (forceRefresh && !inCooldown) {
+        if (cacheRecord) {
+          await env.STATS_KV.delete(`${KV_CACHE_PREFIX}${timeRange}`);
+          console.log(`强制刷新缓存: ${timeRange}`);
+        }
+      } else if (forceRefresh && inCooldown) {
+        // 如果在CD期间尝试强制刷新，返回冷却时间信息
+        const lastUpdate = new Date(cacheRecord.metadata.lastUpdate);
+        const elapsedMs = now - lastUpdate;
+        const remainingMs = CACHE_COOLDOWN_MS - elapsedMs;
+        const remainingMinutes = Math.ceil(remainingMs / (1000 * 60));
+        
+        return new Response(JSON.stringify({
+          error: "cache_cooldown",
+          message: `缓存冷却中，请等待${remainingMinutes}分钟后再试`,
+          cooldown: {
+            total: CACHE_COOLDOWN_MS / 1000,
+            elapsed: elapsedMs / 1000,
+            remaining: remainingMs / 1000
+          }
+        }), {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store"
+          }
+        });
+      }
+      
+      const data = await queryStats(env.DB, env, timeRange);
       
       return new Response(JSON.stringify(data), {
         headers: {
           ...corsHeaders,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Cache-Control": inCooldown ? "public, max-age=600" : "no-store" // 增加到10分钟
         }
       });
     } 
@@ -435,6 +652,150 @@ export default {
           "Content-Type": "application/json"
         }
       });
+    }
+    // 获取缓存统计信息
+    else if (path === "/api/cache-info") {
+      const cacheInfo = await getCacheStats(env);
+      
+      return new Response(JSON.stringify(cacheInfo), {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json"
+        }
+      });
+    }
+    // 手动刷新缓存
+    else if (path === "/api/refresh-cache" && request.method === "POST") {
+      try {
+        // 获取请求中指定的时间范围，如果没有则刷新所有
+        const body = await request.json().catch(() => ({}));
+        const targetTimeRange = body.timeRange;
+        const now = new Date();
+        
+        // 如果指定了时间范围
+        if (targetTimeRange) {
+          const cacheRecord = await env.STATS_KV.get(`${KV_CACHE_PREFIX}${targetTimeRange}`, {type: "json"});
+          
+          // 检查是否在CD期间
+          if (cacheRecord && cacheRecord.metadata) {
+            const lastUpdate = new Date(cacheRecord.metadata.lastUpdate);
+            const elapsedMs = now - lastUpdate;
+            const inCooldown = elapsedMs < CACHE_COOLDOWN_MS;
+            
+            if (inCooldown) {
+              // 如果在CD期间，返回错误信息
+              const remainingMs = CACHE_COOLDOWN_MS - elapsedMs;
+              const remainingMinutes = Math.ceil(remainingMs / (1000 * 60));
+              
+              return new Response(JSON.stringify({
+                success: false,
+                error: "cache_cooldown",
+                message: `缓存冷却中，请等待${remainingMinutes}分钟后再试`,
+                cooldown: {
+                  total: CACHE_COOLDOWN_MS / 1000,
+                  elapsed: elapsedMs / 1000,
+                  remaining: remainingMs / 1000
+                }
+              }), {
+                status: 429,
+                headers: {
+                  ...corsHeaders,
+                  "Content-Type": "application/json"
+                }
+              });
+            }
+            
+            // 不在CD期间，删除指定时间范围的缓存
+            await env.STATS_KV.delete(`${KV_CACHE_PREFIX}${targetTimeRange}`);
+            
+            return new Response(JSON.stringify({
+              success: true,
+              message: `${targetTimeRange}时间范围的缓存已重置，下次查询将更新缓存`
+            }), {
+              headers: {
+                ...corsHeaders,
+                "Content-Type": "application/json"
+              }
+            });
+          } else {
+            // 指定的时间范围没有缓存
+            return new Response(JSON.stringify({
+              success: false,
+              message: `${targetTimeRange}时间范围没有缓存数据`
+            }), {
+              headers: {
+                ...corsHeaders,
+                "Content-Type": "application/json"
+              }
+            });
+          }
+        } else {
+          // 刷新所有缓存，但需要检查CD
+          const timeRanges = ["1h", "6h", "24h", "7d", "30d"];
+          let hasActiveCD = false;
+          let cdTimeRanges = [];
+          
+          // 检查每个时间范围是否在CD期间
+          for (const timeRange of timeRanges) {
+            const cacheRecord = await env.STATS_KV.get(`${KV_CACHE_PREFIX}${timeRange}`, {type: "json"});
+            if (cacheRecord && cacheRecord.metadata) {
+              const lastUpdate = new Date(cacheRecord.metadata.lastUpdate);
+              const elapsedMs = now - lastUpdate;
+              const inCooldown = elapsedMs < CACHE_COOLDOWN_MS;
+              
+              if (inCooldown) {
+                hasActiveCD = true;
+                cdTimeRanges.push({
+                  timeRange,
+                  remainingMinutes: Math.ceil((CACHE_COOLDOWN_MS - elapsedMs) / (1000 * 60))
+                });
+              } else {
+                // 移除不在CD的缓存
+                await env.STATS_KV.delete(`${KV_CACHE_PREFIX}${timeRange}`);
+              }
+            }
+          }
+          
+          // 如果有CD中的缓存，返回错误
+          if (hasActiveCD) {
+            return new Response(JSON.stringify({
+              success: false,
+              error: "cache_cooldown",
+              message: "部分缓存在冷却中，无法刷新",
+              cdTimeRanges
+            }), {
+              status: 429,
+              headers: {
+                ...corsHeaders,
+                "Content-Type": "application/json"
+              }
+            });
+          }
+          
+          return new Response(JSON.stringify({
+            success: true,
+            message: "所有缓存已重置，下次查询将更新缓存"
+          }), {
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json"
+            }
+          });
+        }
+      } catch (error) {
+        console.error("刷新缓存失败:", error);
+        return new Response(JSON.stringify({
+          success: false,
+          error: "refresh_cache_error",
+          message: error.message
+        }), {
+          status: 500,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json"
+          }
+        });
+      }
     }
     else {
       return new Response("未找到对应的API路由", {

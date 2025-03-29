@@ -7,6 +7,10 @@ binding = "DB"
 database_name = "opentracker_stats"
 database_id = ""  # 需要在Cloudflare Dashboard中创建并填入
 
+[[kv_namespaces]]
+binding = "STATS_KV"
+id = ""  # 需要在Cloudflare Dashboard中创建并填入
+
 [triggers]
 # 修改为每分钟运行一次，但仅在前1小时内存储每分钟的数据，之后降低到每10分钟一次
 crons = ["* * * * *"]  # 每分钟运行一次数据收集
