@@ -1,0 +1,16 @@
+name = "opentracker-collector"
+main = "src/index.js"
+compatibility_date = "2024-03-29"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "opentracker_stats"
+database_id = ""  # 需要在Cloudflare Dashboard中创建并填入
+
+[triggers]
+# 修改为每分钟运行一次，但仅在前1小时内存储每分钟的数据，之后降低到每10分钟一次
+crons = ["* * * * *"]  # 每分钟运行一次数据收集
+
+[vars]
+TRACKER_URL = "http://your-tracker-server-url/stats"  # 更改为您的opentracker服务器URL
+STORE_DETAILED_HOURS = "1"  # 存储详细数据(每分钟)的小时数 

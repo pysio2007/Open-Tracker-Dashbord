@@ -1,0 +1,72 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark;
+}
+
+/* 自定义样式 */
+.time-range-btn.active {
+  background-color: hsl(var(--p));
+  color: hsl(var(--pc));
+}
+
+/* 导航按钮样式 */
+.page-nav.btn-active {
+  background-color: hsl(var(--p));
+  color: hsl(var(--pc));
+}
+
+/* 图表加载过渡效果 */
+canvas {
+  transition: opacity 0.3s ease;
+}
+canvas.loading {
+  opacity: 0.5;
+}
+
+/* 趋势指示器样式 */
+.trend-up {
+  color: hsl(var(--su));
+}
+.trend-down {
+  color: hsl(var(--er));
+}
+.trend-neutral {
+  color: hsl(var(--n));
+}
+
+/* 存储页面样式 */
+#page-storage .progress-success {
+  --progress-color: hsl(var(--su));
+}
+#page-storage .progress-warning {
+  --progress-color: hsl(var(--wa));
+}
+#page-storage .progress-error {
+  --progress-color: hsl(var(--er));
+}
+
+/* 页面切换过渡效果 */
+[id^="page-"] {
+  transition: opacity 0.3s ease;
+  opacity: 1;
+}
+[id^="page-"].hidden {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+/* 移动端响应式调整 */
+@media (max-width: 768px) {
+  .stats {
+    padding: 0.5rem;
+  }
+  
+  .stat-value {
+    font-size: 1.5rem;
+  }
+  
+  .navbar-center {
+    display: none;
+  }
+} 

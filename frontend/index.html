@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenTracker 统计仪表板</title>
+  <!-- 使用daisyUI 5 和 Tailwind CSS CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <!-- Chart.js 用于图表 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- 自定义样式 -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="min-h-screen flex flex-col">
+    <!-- 导航栏 -->
+    <div class="navbar bg-base-200">
+      <div class="navbar-start">
+        <a class="text-xl font-bold">OpenTracker 统计仪表板</a>
+      </div>
+      <div class="navbar-center">
+        <span id="tracker-info" class="text-base-content/70"></span>
+      </div>
+      <div class="navbar-end">
+        <a class="btn btn-ghost mx-2 page-nav" data-page="dashboard">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          <span>统计</span>
+        </a>
+        <a class="btn btn-ghost mx-2 page-nav" data-page="storage">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+          </svg>
+          <span>存储</span>
+        </a>
+        <div class="dropdown dropdown-end">
+          <button class="btn btn-ghost">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </svg>
+            <span>设置</span>
+          </button>
+          <div class="dropdown-content bg-base-200 text-base-content rounded-box w-52 p-2 shadow">
+            <div class="form-control">
+              <label class="label cursor-pointer">
+                <span class="label-text">深色模式</span>
+                <input type="checkbox" id="theme-toggle" class="toggle" />
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 统计仪表板页面 -->
+    <div id="page-dashboard" class="container mx-auto p-4 flex-grow">
+      <!-- 时间范围选择器 -->
+      <div class="flex justify-center mb-6">
+        <div class="join">
+          <button class="btn join-item time-range-btn active" data-range="1h">1小时</button>
+          <button class="btn join-item time-range-btn" data-range="6h">6小时</button>
+          <button class="btn join-item time-range-btn" data-range="24h">24小时</button>
+          <button class="btn join-item time-range-btn" data-range="7d">7天</button>
+          <button class="btn join-item time-range-btn" data-range="30d">30天</button>
+        </div>
+      </div>
+
+      <!-- 运行时间卡片 -->
+      <div class="card bg-base-100 shadow-xl mb-6">
+        <div class="card-body">
+          <h2 class="card-title">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            运行时间
+          </h2>
+          <div class="flex flex-col md:flex-row items-center justify-between">
+            <div class="text-center mb-4 md:mb-0">
+              <div class="text-3xl font-bold" id="uptime">-</div>
+              <div class="text-sm opacity-70">总运行时间</div>
+            </div>
+            
+            <div class="divider divider-horizontal hidden md:flex"></div>
+            
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+              <div>
+                <div class="stat-value text-xl font-bold" id="uptime-days">-</div>
+                <div class="text-sm opacity-70">天</div>
+              </div>
+              <div>
+                <div class="stat-value text-xl font-bold" id="uptime-hours">-</div>
+                <div class="text-sm opacity-70">小时</div>
+              </div>
+              <div>
+                <div class="stat-value text-xl font-bold" id="uptime-minutes">-</div>
+                <div class="text-sm opacity-70">分钟</div>
+              </div>
+              <div>
+                <div class="stat-value text-xl font-bold" id="uptime-seconds">-</div>
+                <div class="text-sm opacity-70">秒</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 基本统计 -->
+      <div class="stats stats-vertical lg:stats-horizontal shadow mb-6 w-full">
+        <div class="stat">
+          <div class="stat-title">种子数量</div>
+          <div class="stat-value" id="torrents-count">-</div>
+          <div class="stat-desc" id="torrents-trend"></div>
+        </div>
+        
+        <div class="stat">
+          <div class="stat-title">Peers</div>
+          <div class="stat-value" id="peers-count">-</div>
+          <div class="stat-desc" id="peers-trend"></div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-title">做种者</div>
+          <div class="stat-value" id="seeds-count">-</div>
+          <div class="stat-desc" id="seeds-trend"></div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-title">已完成</div>
+          <div class="stat-value" id="completed-count">-</div>
+          <div class="stat-desc" id="completed-trend"></div>
+        </div>
+      </div>
+      
+      <!-- 核心指标详情卡片 -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <!-- 种子数量卡片 -->
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="card-title">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                种子数量统计
+              </h2>
+              <div class="badge badge-primary badge-lg text-lg" id="torrents-count-badge">-</div>
+            </div>
+            <div class="h-48">
+              <canvas id="torrents-detail-chart"></canvas>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mt-4">
+              <div class="stat bg-base-200 rounded-box">
+                <div class="stat-title">Mutex计数</div>
+                <div class="stat-value text-base" id="torrents-mutex">-</div>
+              </div>
+              <div class="stat bg-base-200 rounded-box">
+                <div class="stat-title">Iterator计数</div>
+                <div class="stat-value text-base" id="torrents-iterator">-</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Peers卡片 -->
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="card-title">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                Peers统计
+              </h2>
+              <div class="badge badge-secondary badge-lg text-lg" id="peers-count-badge">-</div>
+            </div>
+            <div class="h-48">
+              <canvas id="peers-detail-chart"></canvas>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mt-4">
+              <div class="stat bg-base-200 rounded-box">
+                <div class="stat-title">做种比例</div>
+                <div class="stat-value text-base" id="seed-ratio">-</div>
+              </div>
+              <div class="stat bg-base-200 rounded-box">
+                <div class="stat-title">下载比例</div>
+                <div class="stat-value text-base" id="leech-ratio">-</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 做种者卡片 -->
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="card-title">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+                做种者统计
+              </h2>
+              <div class="badge badge-success badge-lg text-lg" id="seeds-count-badge">-</div>
+            </div>
+            <div class="h-48">
+              <canvas id="seeds-detail-chart"></canvas>
+            </div>
+            <div class="mt-4 bg-base-200 rounded-box p-4">
+              <div class="stat-title">占总Peers百分比</div>
+              <div class="mt-2">
+                <div class="relative">
+                  <div class="overflow-hidden h-2 text-xs flex rounded bg-base-content/20">
+                    <div id="seed-percent-bar" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-success" style="width: 0%"></div>
+                  </div>
+                  <div class="flex justify-between text-xs mt-1">
+                    <span>0%</span>
+                    <span id="seed-percent-text" class="font-bold">-</span>
+                    <span>100%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 已完成卡片 -->
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="card-title">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                已完成统计
+              </h2>
+              <div class="badge badge-info badge-lg text-lg" id="completed-count-badge">-</div>
+            </div>
+            <div class="h-48">
+              <canvas id="completed-detail-chart"></canvas>
+            </div>
+            <div class="mt-4 bg-base-200 rounded-box p-4">
+              <div class="stat-title">平均每种子完成数</div>
+              <div class="stat-value text-lg text-center mt-2" id="avg-completed">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 图表容器 -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- 种子/Peers/做种者数量图表 -->
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="card-title">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                用户统计
+              </h2>
+              <div class="badge badge-primary badge-lg text-lg" id="users-count-badge">-</div>
+            </div>
+            <div class="h-64">
+              <canvas id="users-chart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- 连接统计图表 -->
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="card-title">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                连接统计
+              </h2>
+              <div class="badge badge-secondary badge-lg text-lg" id="connections-count-badge">-</div>
+            </div>
+            <div class="h-64">
+              <canvas id="connections-chart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- TCP连接类型图表 -->
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="card-title">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                TCP连接类型
+              </h2>
+              <div class="badge badge-accent badge-lg text-lg" id="tcp-count-badge">-</div>
+            </div>
+            <div class="h-64">
+              <canvas id="tcp-chart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- UDP连接类型图表 -->
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="card-title">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-neutral" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                UDP连接类型
+              </h2>
+              <div class="badge badge-neutral badge-lg text-lg" id="udp-count-badge">-</div>
+            </div>
+            <div class="h-64">
+              <canvas id="udp-chart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 存储信息页面 -->
+    <div id="page-storage" class="container mx-auto p-4 flex-grow hidden">
+      <!-- 存储使用情况 -->
+      <div class="card bg-base-100 shadow-xl mb-6">
+        <div class="card-body">
+          <h2 class="card-title text-2xl">存储使用情况</h2>
+          <div class="divider"></div>
+          
+          <div class="flex flex-col md:flex-row gap-6 justify-center">
+            <div class="stats bg-primary/10 text-base-content shadow-sm">
+              <div class="stat">
+                <div class="stat-title opacity-75">数据记录</div>
+                <div class="stat-value text-4xl text-primary/80" id="row-count">-</div>
+                <div class="stat-desc opacity-60">条统计记录</div>
+              </div>
+            </div>
+            
+            <div class="stats bg-secondary/10 text-base-content shadow-sm">
+              <div class="stat">
+                <div class="stat-title opacity-75">存储空间</div>
+                <div class="stat-value text-4xl text-secondary/80" id="storage-size">-</div>
+                <div class="stat-desc opacity-60">预估使用量</div>
+              </div>
+            </div>
+            
+            <div class="stats bg-accent/10 text-base-content shadow-sm">
+              <div class="stat">
+                <div class="stat-title opacity-75">每行大小</div>
+                <div class="stat-value text-4xl text-accent/80" id="row-size">-</div>
+                <div class="stat-desc opacity-60">字节/条</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="mt-8">
+            <div class="text-lg font-bold">存储空间用量</div>
+            <div class="w-full bg-base-200 rounded-box p-4 mt-2">
+              <progress class="progress w-full h-6" id="storage-progress" value="0" max="5120"></progress>
+              <div class="flex justify-between text-sm mt-2">
+                <span>0 GB</span>
+                <span id="storage-percent" class="font-bold">0%</span>
+                <span>5 GB (免费额度)</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="divider"></div>
+          
+          <div class="bg-base-200 p-4 rounded-box mt-4">
+            <h3 class="text-xl font-bold mb-4">智能采样策略</h3>
+            <ul class="list-disc list-inside space-y-2">
+              <li>Worker 每分钟运行一次，获取当前统计数据</li>
+              <li>最近 <span class="font-bold">1小时</span> 内每分钟存储一次数据，保证实时性</li>
+              <li>超过1小时的数据仅在10分钟整点存储一次（如10:00, 10:10, 10:20...）</li>
+              <li>自动清理30天以前的旧数据，确保存储空间利用率</li>
+              <li>实时估算并显示存储空间使用情况</li>
+            </ul>
+          </div>
+          
+          <div class="bg-base-200 p-4 rounded-box mt-4">
+            <h3 class="text-xl font-bold mb-4">Cloudflare D1 免费额度</h3>
+            <div class="overflow-x-auto">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>资源</th>
+                    <th>免费限额</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>每日读取行数</td>
+                    <td>500万行/天</td>
+                  </tr>
+                  <tr>
+                    <td>每日写入行数</td>
+                    <td>10万行/天</td>
+                  </tr>
+                  <tr>
+                    <td>总存储空间</td>
+                    <td>5GB</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+          <div class="mt-6 flex justify-end">
+            <button id="refresh-storage-btn" class="btn btn-primary">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              刷新存储信息
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="footer footer-center p-4 bg-base-200 text-base-content">
+      <div>
+        <p>Copyright © 2025 - OpenTracker 统计仪表板</p>
+      </div>
+    </footer>
+  </div>
+
+  <!-- 加载指示器 -->
+  <div id="loading-indicator" class="fixed inset-0 flex items-center justify-center bg-base-100/80 z-50 hidden">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+
+  <!-- 自定义脚本 -->
+  <script src="js/app.js"></script>
+</body>
+</html> 
